@@ -8,8 +8,7 @@ import requests
 import telebot
 from dotenv import load_dotenv
 
-from exceptions import (EmptyAPIResponse, HttpStatusNotOK, HomeworkStatusError,
-                        NoHomeworkNameKey, RequestError, TokensAccessError)
+from exceptions import (EmptyAPIResponse, HttpStatusNotOK, RequestError)
 
 load_dotenv()
 
@@ -43,9 +42,8 @@ HOMEWORK_VERDICTS = {
 def check_tokens():
     """Функция проверяет доступность переменных окружения."""
     if not all((PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID)):
-        logging.critical(
-            'Переменные окружения недоступны.')
-        raise TokensAccessError('Переменные окружения недоступны.')
+        return False
+    return True
 
 
 def send_message(bot, message):
@@ -83,44 +81,47 @@ def get_api_answer(timestamp):
 
 def check_response(response):
     """Функция проверяет ответ API на соответствие документации API сервиса."""
-    if isinstance(response, dict):
-        try:
-            homeworks = response['homeworks']
-        except KeyError:
-            raise EmptyAPIResponse(
-                'В ответе API домашки нет ключа `homeworks`.'
-            )
-        if not isinstance(homeworks, list):
-            error_message = ('В ответе API домашки под ключом `homeworks` '
-                             'данные приходят не в виде списка.')
-            raise TypeError(error_message)
-        return homeworks
-    raise TypeError('В ответе API домашки `response` '
-                    'по типу не является словарем.')
+    if not isinstance(response, dict):
+        raise TypeError('В ответе API домашки `response` '
+                        'по типу не является словарем.')
+    if 'homeworks' not in response:
+        raise EmptyAPIResponse(
+            'В ответе API домашки нет ключа `homeworks`.'
+        )
+    if 'current_date' not in response:
+        raise EmptyAPIResponse(
+            'В ответе API домашки нет ключа `current_date`.'
+        )
+    homeworks = response['homeworks']
+    if not isinstance(homeworks, list):
+        raise TypeError('В ответе API домашки под ключом `homeworks` '
+                        'данные приходят не в виде списка.')
+    return homeworks
 
 
 def parse_status(homework):
     """Функция извлекает информацию о домашней работе и статус этой работы."""
-    try:
-        homework_name = homework['homework_name']
-    except KeyError:
-        raise NoHomeworkNameKey(
+    homework_name = homework.get('homework_name')
+    homework_status = homework.get('status')
+    if 'homework_name' not in homework:
+        raise KeyError(
             'В ответе API домашки нет ключа `homework_name`.'
         )
-    try:
-        status = homework['status']
-        verdict = HOMEWORK_VERDICTS[status]
-    except KeyError:
-        raise HomeworkStatusError('В ответе API домашки возвращает '
-                                  'недокументированный статус домашней '
-                                  'работы либо домашку без статуса.')
-
+    if 'status' not in homework:
+        raise KeyError(
+            'В ответе API домашки нет ключа `status`.'
+        )
+    if homework_status not in HOMEWORK_VERDICTS.keys():
+        raise KeyError('Отсутствует допустимый статус домашки')
+    verdict = HOMEWORK_VERDICTS[homework_status]
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
 def main():
     """Основная логика работы бота."""
-    check_tokens()
+    if check_tokens() is False:
+        logging.critical('Переменные окружения недоступны.')
+        sys.exit("Ошибка: Токены не прошли валидацию")
     previous_status = None
     bot = telebot.TeleBot(token=TELEGRAM_TOKEN)
     timestamp = int(time.time())
@@ -134,9 +135,6 @@ def main():
             else:
                 new_status = 'Новые статусы в ответе API отсутствуют.'
                 logging.DEBUG(new_status)
-            if previous_status != new_status:
-                send_message(bot, new_status)
-                previous_status = new_status
         except EmptyAPIResponse as error:
             logger.error(error)
         except Exception as error:
@@ -146,6 +144,9 @@ def main():
                 send_message(bot, message)
                 previous_status = message
         finally:
+            if previous_status != new_status:
+                send_message(bot, new_status)
+                previous_status = new_status
             time.sleep(RETRY_PERIOD)
 
 
