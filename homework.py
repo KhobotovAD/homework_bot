@@ -41,9 +41,7 @@ HOMEWORK_VERDICTS = {
 
 def check_tokens():
     """Функция проверяет доступность переменных окружения."""
-    if not all((PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID)):
-        return False
-    return True
+    return all((PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID))
 
 
 def send_message(bot, message):
@@ -82,19 +80,19 @@ def get_api_answer(timestamp):
 def check_response(response):
     """Функция проверяет ответ API на соответствие документации API сервиса."""
     if not isinstance(response, dict):
-        raise TypeError('В ответе API домашки `response` '
+        raise TypeError('В ответе API домашки "response" '
                         'по типу не является словарем.')
     if 'homeworks' not in response:
         raise EmptyAPIResponse(
-            'В ответе API домашки нет ключа `homeworks`.'
+            'В ответе API домашки нет ключа "homeworks".'
         )
     if 'current_date' not in response:
         raise EmptyAPIResponse(
-            'В ответе API домашки нет ключа `current_date`.'
+            'В ответе API домашки нет ключа "current_date".'
         )
     homeworks = response['homeworks']
     if not isinstance(homeworks, list):
-        raise TypeError('В ответе API домашки под ключом `homeworks` '
+        raise TypeError('В ответе API домашки под ключом "homeworks" '
                         'данные приходят не в виде списка.')
     return homeworks
 
@@ -105,11 +103,11 @@ def parse_status(homework):
     homework_status = homework.get('status')
     if 'homework_name' not in homework:
         raise KeyError(
-            'В ответе API домашки нет ключа `homework_name`.'
+            'В ответе API домашки нет ключа "homework_name".'
         )
     if 'status' not in homework:
         raise KeyError(
-            'В ответе API домашки нет ключа `status`.'
+            'В ответе API домашки нет ключа "status".'
         )
     if homework_status not in HOMEWORK_VERDICTS.keys():
         raise KeyError('Отсутствует допустимый статус домашки')
@@ -121,7 +119,7 @@ def main():
     """Основная логика работы бота."""
     if check_tokens() is False:
         logging.critical('Переменные окружения недоступны.')
-        sys.exit("Ошибка: Токены не прошли валидацию")
+        sys.exit('Ошибка: Токены не прошли валидацию')
     previous_status = None
     bot = telebot.TeleBot(token=TELEGRAM_TOKEN)
     timestamp = int(time.time())
@@ -140,9 +138,6 @@ def main():
         except Exception as error:
             message = (f'Сбой в работе программы: {error}.')
             logging.exception(message)
-            if previous_status != message:
-                send_message(bot, message)
-                previous_status = message
         finally:
             if previous_status != new_status:
                 send_message(bot, new_status)
